@@ -1,0 +1,103 @@
+name: CI
+
+# Runs after every push to main and on every pull request targeting main.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    # Throwaway databases that exist only for this job, started as Docker
+    # containers next to the runner. Health checks make GitHub wait until
+    # they accept connections before running our steps.
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_USER: app
+          MYSQL_PASSWORD: app
+          MYSQL_DATABASE: job_tracker
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      mongo:
+        image: mongo:7
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd="mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    # The CI equivalent of .env. Throwaway values for a database that is
+    # deleted when the job ends; nothing here is a real secret.
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: 3306
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+      MYSQL_DATABASE: job_tracker
+      MONGO_URI: mongodb://127.0.0.1:27017/job_tracker
+      JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-real-0001
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-anywhere-real-0002
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Installs exactly what package-lock.json says; fails if it disagrees
+      # with package.json. Never `npm install` in CI.
+      - run: npm ci
+
+      # node --check on every file under src: parses without executing.
+      - name: Syntax check
+        run: npm run check
+
+      - name: Migrate schema
+        run: npm run db:migrate
+
+      # Boot the real server against the real databases, wait for it, and
+      # assert /health, register, create and activity all behave.
+      - name: Smoke test
+        run: |
+          node src/server.js > server.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:3000/health && break
+            sleep 1
+          done
+          echo
+          BODY=$(curl -s http://localhost:3000/health)
+          echo "$BODY"
+          echo "$BODY" | grep -q '"mysql":"ok"' || { cat server.log; exit 1; }
+          echo "$BODY" | grep -q '"mongo":"ok"' || { cat server.log; exit 1; }
+
+          REG=$(curl -s -X POST http://localhost:3000/auth/register \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"ci@example.com","password":"ci-password-123"}')
+          echo "$REG" | grep -q accessToken || { echo "$REG"; cat server.log; exit 1; }
+          TOKEN=$(echo "$REG" | sed -E 's/.*"accessToken":"([^"]+)".*/\1/')
+
+          CREATED=$(curl -s -X POST http://localhost:3000/applications \
+            -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+            -d '{"company":"CI Corp","role_title":"Engineer"}')
+          echo "$CREATED" | grep -q '"status":"applied"' || { echo "$CREATED"; cat server.log; exit 1; }
+
+          ACT=$(curl -s http://localhost:3000/activity -H "Authorization: Bearer $TOKEN")
+          echo "$ACT" | grep -q '"action":"created"' || { echo "$ACT"; cat server.log; exit 1; }
+          echo "smoke test passed"
+
+      # Runs even when an earlier step failed, so a red run is debuggable
+      # from the Actions tab.
+      - name: Server log
+        if: always()
+        run: cat server.log || true
