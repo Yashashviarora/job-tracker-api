@@ -13,9 +13,11 @@ const pool = mysql.createPool({
   waitForConnections: true, // queue callers instead of erroring when all 10 are busy
   connectionLimit: 10,
   queueLimit: 0,            // 0 = unlimited queue
-  timezone: 'Z', 
+  timezone: 'Z',            // read/write DATETIME as UTC
   dateStrings: ['DATE'],    // DATE columns come back as 'YYYY-MM-DD' strings, not JS Dates
-           // read/write DATETIME as UTC
+  // Hosted MySQL requires TLS; local Docker does not. rejectUnauthorized: true
+  // verifies the server certificate like a browser does. Never set it false.
+  ssl: env.MYSQL_SSL ? { minVersion: 'TLSv1.2', rejectUnauthorized: true } : undefined,
 });
 
 // Cheap round-trip used by /health. Throws if the DB is unreachable.

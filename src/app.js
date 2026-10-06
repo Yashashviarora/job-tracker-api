@@ -15,6 +15,10 @@ const activityRouter = require('./routes/activity');
 
 const app = express();
 
+// Behind the host's reverse proxy (Render, nginx): trust X-Forwarded-* so
+// req.ip and req.protocol reflect the real client. 1 = exactly one proxy hop.
+app.set('trust proxy', 1);
+
 // ---- global middleware (order matters: runs top to bottom) ----
 app.use(requestId);        // first, so every later log line has req.id
 app.use(helmet());         // sets security headers

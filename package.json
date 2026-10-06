@@ -4,7 +4,7 @@
   "description": "Job application tracker API: Express 5, MySQL, MongoDB, JWT with refresh rotation, keyset pagination",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node src/db/migrate.js && node src/server.js",
     "dev": "nodemon src/server.js",
     "db:migrate": "node src/db/migrate.js",
     "check": "node -e \"require('node:fs').readdirSync('src',{recursive:true}).filter(f=>f.endsWith('.js')).forEach(f=>{require('node:child_process').execFileSync(process.execPath,['--check','src/'+f],{stdio:'inherit'});console.log('ok  src/'+f)})\""

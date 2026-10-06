@@ -13,6 +13,13 @@ const envSchema = z.object({
   MYSQL_USER: z.string().min(1),
   MYSQL_PASSWORD: z.string().min(1),
   MYSQL_DATABASE: z.string().min(1),
+  // Hosted MySQL (TiDB, Aiven, PlanetScale) requires TLS; local Docker does not.
+  // Env vars are strings, so accept 'true'/'false' and convert to a boolean.
+  MYSQL_SSL: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+
   MONGO_URI: z.string().min(1),
 
   JWT_ACCESS_SECRET: z.string().min(32),
