@@ -1,0 +1,43 @@
+name: Web
+
+# Build the React frontend and publish it to the gh-pages branch.
+# Runs only when something under web/ (or this file) changes.
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/web.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to push the gh-pages branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # Pages serves this repo at /job-tracker-api/, so asset URLs need that prefix.
+      - run: npm run build
+        env:
+          VITE_BASE: /job-tracker-api/
+
+      # Single-page app: unknown paths should load the app, not a 404.
+      - run: cp dist/index.html dist/404.html
+
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: web/dist
+          force_orphan: true
