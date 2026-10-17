@@ -9,7 +9,7 @@ const STATUS_RULES = [
   ['offer', /offer letter|pleased to offer|job offer|extend(?:ing)? (?:you )?an offer|offer of employment/i],
   ['interview', /interview|on-?site|schedule a (?:call|time)|your availability/i],
   ['screening', /phone screen|screening call|assessment|coding (?:challenge|test)|take-?home|hackerrank|codility/i],
-  ['applied', /thank you for applying|thanks for applying|application (?:has been )?received|received your application/i],
+  ['applied', /thank you for applying|thanks for applying|thank you for your application|thanks for your application|application (?:has been )?received|received your application/i],
 ];
 
 function detectStatus(subject, text) {
@@ -80,4 +80,44 @@ function matchApplication(apps, { from, subject, text }) {
   );
 }
 
-module.exports = { detectStatus, shouldUpdate, senderCompanyLabel, normalizeCompany, matchApplication };
+// Used only when an "applied" email matches no application: guess what to create.
+// Capitalised words after "applying to", "position at", etc. Heuristic: the user
+// can rename it later. Returns null when no company can be found.
+const COMPANY_PATTERNS = [
+  /(?:applying|application|applied) (?:to|at|with) ([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,3})/,
+  /interest in (?:joining )?([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,3})/,
+  /(?:position|role|job|opening) at ([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,3})/,
+];
+const ROLE_PATTERNS = [
+  /(?:application|applying) for (?:the |a |an )?([A-Z][\w\/&+#.()' -]{2,80}?)(?: (?:position|role|opening))?(?: at | with |[!.,|]|$)/,
+  /(?:for|as) (?:the |a |an )?([A-Z][\w\/&+#.()' -]{2,80}?) (?:position|role|opening)\b/,
+  / [-–|:] ([A-Z][\w\/&+#.()' -]{2,80})$/,
+];
+
+function firstMatch(patterns, s) {
+  for (const p of patterns) {
+    const m = s.match(p);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+function guessCompanyAndRole({ from, subject, text }) {
+  let company = firstMatch(COMPANY_PATTERNS, `${subject}\n${text}`);
+  if (!company) {
+    const label = senderCompanyLabel(from); // careers@razorpay.com -> "razorpay"
+    if (label) company = label.charAt(0).toUpperCase() + label.slice(1);
+  }
+  if (!company) return null;
+  const role = firstMatch(ROLE_PATTERNS, subject) || firstMatch(ROLE_PATTERNS, text) || 'Unknown role';
+  return { company: company.slice(0, 255), role: role.slice(0, 255) };
+}
+
+module.exports = {
+  detectStatus,
+  shouldUpdate,
+  senderCompanyLabel,
+  normalizeCompany,
+  matchApplication,
+  guessCompanyAndRole,
+};
