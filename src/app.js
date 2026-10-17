@@ -5,6 +5,8 @@ const helmet = require('helmet');
 const cors = require('cors');
 const adminRouter = require('./routes/admin');
 const { requireAuth, requireRole } = require('./middleware/auth');
+const webhooksRouter = require('./routes/webhooks');
+const deadLetterRouter = require('./routes/deadLetter');
 
 const requestId = require('./middleware/requestId');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
@@ -23,7 +25,17 @@ app.set('trust proxy', 1);
 app.use(requestId);        // first, so every later log line has req.id
 app.use(helmet());         // sets security headers
 app.use(cors());
-app.use(express.json());   // parses JSON bodies into req.body
+// Parse JSON into req.body, and also keep the exact original bytes in
+// req.rawBody. Webhook signatures are computed over the raw bytes, and
+// re-serialising req.body would not reproduce them.
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+);
 
 // tiny request logger
 app.use((req, res, next) => {
@@ -39,6 +51,8 @@ app.use('/auth', authRouter);
 app.use('/admin', requireAuth, requireRole('admin'), adminRouter);
 app.use('/applications', applicationsRouter);
 app.use('/activity', activityRouter);
+app.use('/events', webhooksRouter);
+app.use('/dead-letter', requireAuth, requireRole('admin'), deadLetterRouter);
 
 // ---- fallthrough ----
 app.use(notFound);      // nothing above matched

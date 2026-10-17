@@ -26,6 +26,13 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('7d'),
+  WEBHOOK_SECRET: z.string().min(32),
+  WORKER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  WORKER_POLL_MS: z.coerce.number().int().min(200).default(2000),
+
 
 });
 

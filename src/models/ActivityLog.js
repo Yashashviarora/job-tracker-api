@@ -8,6 +8,9 @@ const activityLogSchema = new mongoose.Schema(
     action: { type: String, enum: ACTIONS, required: true },
     from: { type: String, default: null }, // previous status, when relevant
     to: { type: String, default: null },   // new status, when relevant
+        via: { type: String, enum: ['api', 'email'], default: 'api' }, // who made the change
+    event_id: { type: String, default: null },                    // the email that caused it
+
     at: { type: Date, default: Date.now },
   },
   {

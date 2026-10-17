@@ -3,15 +3,18 @@ const ActivityLog = require('../models/ActivityLog');
 // Same contract as the MySQL repositories: plain data in, plain data out.
 // Callers never see mongoose documents or query builders.
 
-async function record({ applicationId, userId, action, from = null, to = null }) {
+async function record({ applicationId, userId, action, from = null, to = null, via = 'api', eventId = null }) {
   await ActivityLog.create({
     application_id: applicationId,
     user_id: userId,
     action,
     from,
     to,
+    via,
+    event_id: eventId,
   });
 }
+
 
 async function listForUser(userId, { limit, applicationId }) {
   const filter = { user_id: userId };

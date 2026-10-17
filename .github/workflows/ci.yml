@@ -46,6 +46,7 @@ jobs:
       MONGO_URI: mongodb://127.0.0.1:27017/job_tracker
       JWT_ACCESS_SECRET: ci-only-access-secret-not-used-anywhere-real-0001
       JWT_REFRESH_SECRET: ci-only-refresh-secret-not-used-anywhere-real-0002
+      WEBHOOK_SECRET: ci-only-webhook-secret-not-used-anywhere-real-0003
 
     steps:
       - uses: actions/checkout@v4
@@ -91,9 +92,16 @@ jobs:
             -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
             -d '{"company":"CI Corp","role_title":"Engineer"}')
           echo "$CREATED" | grep -q '"status":"applied"' || { echo "$CREATED"; cat server.log; exit 1; }
-
           ACT=$(curl -s http://localhost:3000/activity -H "Authorization: Bearer $TOKEN")
           echo "$ACT" | grep -q '"action":"created"' || { echo "$ACT"; cat server.log; exit 1; }
+          # Webhook: a signed event is accepted once, then seen as a duplicate;
+          # a wrong signature is rejected.
+          WH1=$(node scripts/sendEmailEvent.js --id ci-evt-1)
+          echo "$WH1" | grep -q '"duplicate":false' || { echo "$WH1"; cat server.log; exit 1; }
+          WH2=$(node scripts/sendEmailEvent.js --id ci-evt-1)
+          echo "$WH2" | grep -q '"duplicate":true' || { echo "$WH2"; cat server.log; exit 1; }
+          BAD=$(node scripts/sendEmailEvent.js --id ci-evt-2 --bad-sig)
+          echo "$BAD" | grep -q '^401' || { echo "$BAD"; cat server.log; exit 1; }
           echo "smoke test passed"
 
       # Runs even when an earlier step failed, so a red run is debuggable

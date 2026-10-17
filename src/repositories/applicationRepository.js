@@ -106,4 +106,36 @@ async function deleteForUser(id, userId) {
   return result.affectedRows === 1;
 }
 
-module.exports = { create, findByIdForUser, listForUser, countByStatus, updateForUser, deleteForUser };
+
+
+// Just what the email matcher needs. Newest first, so if the user applied to
+// the same company twice, the latest application wins.
+async function listForMatching(userId) {
+  const [rows] = await pool.execute(
+    'SELECT id, company, status FROM applications WHERE user_id = ? ORDER BY created_at DESC, id DESC',
+    [userId],
+  );
+  return rows;
+}
+
+// Compare-and-set: only change the status if it is still what we read.
+// If the user edited it in the meantime, affectedRows is 0 and we don't
+// overwrite their change.
+async function updateStatusIfUnchanged(id, userId, fromStatus, toStatus) {
+  const [result] = await pool.execute(
+    'UPDATE applications SET status = ? WHERE id = ? AND user_id = ? AND status = ?',
+    [toStatus, id, userId, fromStatus],
+  );
+  return result.affectedRows === 1;
+}
+
+module.exports = {
+  create,
+  findByIdForUser,
+  listForUser,
+  countByStatus,
+  updateForUser,
+  deleteForUser,
+  listForMatching,
+  updateStatusIfUnchanged,
+};
