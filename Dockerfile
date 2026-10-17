@@ -19,4 +19,6 @@ USER node
 EXPOSE 3000
 
 # What runs when a container starts: migrate (idempotent), then serve.
-CMD ["npm", "start"]
+# No npm wrapper, and `exec` replaces the shell with node, so node is PID 1
+# and receives the host's SIGTERM directly; graceful shutdown then runs.
+CMD ["sh", "-c", "node src/db/migrate.js && exec node src/server.js"]
