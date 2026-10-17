@@ -7,6 +7,7 @@ const {
   shouldUpdate,
   matchApplication,
   guessCompanyAndRole,
+  isNoiseSender,
 } = require('../utils/emailClassifier');
 
 // Audit trail. If Mongo is down the MySQL change still stands (same rule as
@@ -31,6 +32,9 @@ async function processEvent(inboundEventId) {
   // Which user? The address the email was sent (forwarded) to.
   const user = await userRepo.findByEmail(email.to);
   if (!user) return 'ignored: no user with this address';
+
+  // Newsletters and job alerts never describe one of the user's applications.
+  if (isNoiseSender(email.from)) return 'ignored: newsletter or alert sender';
 
   // What does it say? Cheap, no DB, so do it before loading applications.
   const next = detectStatus(email.subject, email.text);

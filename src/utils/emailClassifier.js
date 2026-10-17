@@ -9,15 +9,21 @@ const STATUS_RULES = [
   ['offer', /offer letter|pleased to offer|job offer|extend(?:ing)? (?:you )?an offer|offer of employment/i],
   ['interview', /interview|on-?site|schedule a (?:call|time)|your availability/i],
   ['screening', /phone screen|screening call|assessment|coding (?:challenge|test)|take-?home|hackerrank|codility/i],
-  ['applied', /thank you for applying|thanks for applying|thank you for your application|thanks for your application|application (?:has been )?received|received your application/i],
+  ['applied', /thank you for applying|thanks for applying|thank you for your application|thanks for your application|application (?:has been )?received|received your application|successfully submitted|application (?:was |has been )?(?:sent|submitted)/i],
 ];
 
-function detectStatus(subject, text) {
-  const haystack = `${subject}\n${text}`;
+function matchRules(s) {
   for (const [status, pattern] of STATUS_RULES) {
-    if (pattern.test(haystack)) return status;
+    if (pattern.test(s)) return status;
   }
-  return null; // no idea what this email is about
+  return null;
+}
+
+// Subject first: it says what the email IS. Bodies carry boilerplate
+// ("we'll reach out to schedule an interview") that would turn a plain
+// "application submitted" confirmation into an interview.
+function detectStatus(subject, text) {
+  return matchRules(subject) || matchRules(text); // null: no idea what this is
 }
 
 // Statuses only move forward. Rejected can happen at any stage, and is final.
@@ -37,6 +43,7 @@ const NO_COMPANY_SIGNAL = [
   'greenhouse.io', 'greenhouse-mail.io', 'lever.co', 'myworkdayjobs.com', 'workday.com',
   'ashbyhq.com', 'smartrecruiters.com', 'workable.com', 'icims.com',
   'linkedin.com', 'indeed.com', 'naukri.com',
+  'wellfound.com', 'hackajob.com', 'shine.com', 'internshala.com', 'instahyre.com', 'cutshort.io',
 ];
 const DOMAIN_SUFFIXES = new Set(['com', 'co', 'io', 'in', 'uk', 'org', 'net', 'ai', 'dev', 'jobs', 'us']);
 
@@ -48,7 +55,25 @@ function senderCompanyLabel(from) {
   return labels.length ? labels[labels.length - 1] : null;
 }
 
-const LEGAL_SUFFIXES = /\b(?:inc|llc|ltd|limited|corp|corporation|pvt|private|gmbh)\b\.?/gi;
+// Newsletters, job alerts and career-content mail: they use words like
+// "interview" and "application" but are never about one of YOUR applications.
+// Full addresses or domains; LinkedIn's real "application sent" mail comes
+// from jobs-noreply@linkedin.com, which is not listed.
+const NOISE_SENDERS = [
+  'notifications-noreply@linkedin.com',
+  'naukrialerts@naukri.com',
+  'alerts@jobs.shine.com',
+  'match.indeed.com',
+  'ambitionbox.com',
+  'mailers.internshala.com',
+];
+
+function isNoiseSender(from) {
+  const domain = from.split('@')[1] || '';
+  return NOISE_SENDERS.some((s) => (s.includes('@') ? from === s : domain === s || domain.endsWith(`.${s}`)));
+}
+
+const LEGAL_SUFFIXES =/\b(?:inc|llc|ltd|limited|corp|corporation|pvt|private|gmbh)\b\.?/gi;
 
 // "Acme, Inc." -> "acme"   (for comparing with a domain label)
 function normalizeCompany(name) {
@@ -84,8 +109,10 @@ function matchApplication(apps, { from, subject, text }) {
 // Capitalised words after "applying to", "position at", etc. Heuristic: the user
 // can rename it later. Returns null when no company can be found.
 const COMPANY_PATTERNS = [
-  /(?:applying|application|applied) (?:to|at|with) ([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,3})/,
-  /interest in (?:joining )?([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,3})/,
+  // [Aa]: subjects capitalise the keyword ("Application to X"); the company
+  // itself must still start with a capital, so no /i flag here.
+  /(?:[Aa]pplying|[Aa]pplication|[Aa]pplied) (?:to|at|with) ([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,3})/,
+  /[Ii]nterest in (?:joining )?([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,3})/,
   /(?:position|role|job|opening) at ([A-Z][\w&.'-]*(?: [A-Z][\w&.'-]*){0,3})/,
 ];
 const ROLE_PATTERNS = [
@@ -120,4 +147,5 @@ module.exports = {
   normalizeCompany,
   matchApplication,
   guessCompanyAndRole,
+  isNoiseSender,
 };
